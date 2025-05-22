@@ -5,11 +5,11 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-using Книга_учета; // Убедитесь, что это правильное пространство имен
+using Книга_учета;
 using Newtonsoft.Json;
 using System.IO;
 using System.Windows.Forms.DataVisualization.Charting;
-using System.Data.SQLite; // Добавлено для работы с SQLite
+using System.Data.SQLite;
 
 namespace Книга_учета
 {
@@ -77,6 +77,14 @@ namespace Книга_учета
         {
             dgvCategories.Columns.Clear();
 
+            // Column Id
+            DataGridViewTextBoxColumn idColumn = new DataGridViewTextBoxColumn();
+            idColumn.DataPropertyName = "Id";
+            idColumn.HeaderText = "ID";
+            idColumn.Name = "Id";
+            dgvCategories.Columns.Add(idColumn);
+            idColumn.Visible = false; // Скрываем столбец Id
+
             // Column Name
             DataGridViewTextBoxColumn nameColumn = new DataGridViewTextBoxColumn();
             nameColumn.DataPropertyName = "Name";
@@ -103,6 +111,14 @@ namespace Книга_учета
         private void SetupTransactionsDataGridViewColumns()
         {
             dgvTransactions.Columns.Clear();
+
+            // Column Id
+            DataGridViewTextBoxColumn idColumn = new DataGridViewTextBoxColumn();
+            idColumn.DataPropertyName = "Id";
+            idColumn.HeaderText = "ID";
+            idColumn.Name = "Id";
+            dgvTransactions.Columns.Add(idColumn);
+            idColumn.Visible = false; // Скрываем столбец Id
 
             // Column Date
             DataGridViewTextBoxColumn dateColumn = new DataGridViewTextBoxColumn();
@@ -260,13 +276,15 @@ namespace Книга_учета
                             // Загружаем категории и транзакции из файла
                             foreach (var category in loadedData.Categories)
                             {
-                                dbHelper.AddCategory(category);
-                                accountingData.AddCategory(category);
+                                int newCategoryId = dbHelper.AddCategory(category); // Добавляем категорию в БД и получаем ID
+                                category.Id = newCategoryId; // Устанавливаем ID
+                                accountingData.AddCategory(category); // Добавляем в список
                             }
                             foreach (var transaction in loadedData.Transactions)
                             {
-                                dbHelper.AddTransaction(transaction);
-                                accountingData.AddTransaction(transaction);
+                                transaction.CategoryId = transaction.Category.Id; // Устанавливаем CategoryId
+                                dbHelper.AddTransaction(transaction); // Добавляем транзакцию в БД
+                                accountingData.AddTransaction(transaction); // Добавляем в список
                             }
                         }
                         catch (Exception ex)
@@ -286,9 +304,16 @@ namespace Книга_учета
                                 if (!accountingData.Categories.Any(c => c.Name == category.Name))
                                 {
                                     // Проверяем, есть ли такая категория в БД
-                                    if (!dbHelper.GetAllCategories().Any(c => c.Name == category.Name))
+                                    Category existingCategory = dbHelper.GetAllCategories().FirstOrDefault(c => c.Name == category.Name);
+                                    if (existingCategory == null)
                                     {
-                                        dbHelper.AddCategory(category);
+                                        int newCategoryId = dbHelper.AddCategory(category); // Добавляем категорию в БД и получаем ID
+                                        category.Id = newCategoryId; // Устанавливаем ID
+                                        accountingData.AddCategory(category); // Добавляем в список
+                                    }
+                                    else
+                                    {
+                                        category.Id = existingCategory.Id;
                                         accountingData.AddCategory(category);
                                     }
 
@@ -299,18 +324,18 @@ namespace Книга_учета
                             foreach (var transaction in loadedData.Transactions)
                             {
                                 // Проверяем, есть ли такая транзакция в БД
-                                if (!dbHelper.GetAllTransactions().Any(t =>
-                                            t.Date == transaction.Date &&
-                                            t.Description == transaction.Description &&
-                                            t.Amount == transaction.Amount &&
-                                            t.Category.Name == transaction.Category.Name &&
-                                            t.Type == transaction.Type))
+                                Transaction existingTransaction = dbHelper.GetAllTransactions().FirstOrDefault(t =>
+                                        t.Date == transaction.Date &&
+                                        t.Description == transaction.Description &&
+                                        t.Amount == transaction.Amount &&
+                                        t.Category.Name == transaction.Category.Name &&
+                                        t.Type == transaction.Type);
+                                if (existingTransaction == null)
                                 {
+                                    transaction.CategoryId = transaction.Category.Id;
                                     dbHelper.AddTransaction(transaction);
                                     accountingData.AddTransaction(transaction);
                                 }
-
-
                             }
                         }
                         catch (Exception ex)
@@ -384,7 +409,8 @@ namespace Книга_учета
             {
                 // Добавляем категорию в базу данных и в список в памяти
                 Category newCategory = new Category(name, description);
-                dbHelper.AddCategory(newCategory);
+                int newCategoryId = dbHelper.AddCategory(newCategory); // Получаем ID
+                newCategory.Id = newCategoryId;  //  Устанавливаем ID
                 accountingData.AddCategory(newCategory);
                 categoriesBindingSource.ResetBindings(false);
                 UpdateCategoryComboBox();
@@ -413,6 +439,7 @@ namespace Книга_учета
                     if (!string.IsNullOrEmpty(newName))
                     {
                         Category newCategory = new Category(newName, newDescription);
+                        newCategory.Id = selectedCategory.Id; // Сохраняем старый ID
 
                         // Обновляем категорию в базе данных
                         dbHelper.UpdateCategory(newCategory);
@@ -452,7 +479,7 @@ namespace Книга_учета
                     {
 
                         // Удаляем категорию из базы данных
-                        dbHelper.DeleteCategory(selectedCategory.Name);
+                        dbHelper.DeleteCategory(selectedCategory.Id);
 
                         // Удаляем категорию из списка в памяти
                         accountingData.DeleteCategory(selectedCategory.Name);
@@ -476,7 +503,7 @@ namespace Книга_учета
             cmbTransactionCategory.DataSource = null;
             cmbTransactionCategory.DataSource = accountingData.Categories;
             cmbTransactionCategory.DisplayMember = "Name";
-            cmbTransactionCategory.ValueMember = "Name";
+            cmbTransactionCategory.ValueMember = "Id";  // ValueMember теперь Id
         }
 
         // Методы для транзакций
@@ -491,7 +518,7 @@ namespace Книга_учета
             Category selectedCategory = (Category)cmbTransactionCategory.SelectedItem;
 
             // Проверяем, существует ли выбранная категория в списке категорий
-            if (!accountingData.Categories.Contains(selectedCategory))
+            if (!accountingData.Categories.Any(c => c.Id == selectedCategory.Id))
             {
                 MessageBox.Show("Выбранная категория не существует. Пожалуйста, выберите другую категорию.", "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -506,6 +533,7 @@ namespace Книга_учета
             if (!string.IsNullOrEmpty(description))
             {
                 Transaction transaction = new Transaction(date, description, amount, selectedCategory, type);
+                transaction.CategoryId = selectedCategory.Id; // Устанавливаем CategoryId
 
                 // Добавляем транзакцию в базу данных
                 dbHelper.AddTransaction(transaction);
@@ -543,6 +571,8 @@ namespace Книга_учета
                     {
                         // Создаем *новую* транзакцию с обновленными значениями
                         Transaction newTransaction = new Transaction(newDate, newDescription, amount, selectedCategory, type);
+                        newTransaction.Id = selectedTransaction.Id;  // сохраняем старый ID
+                        newTransaction.CategoryId = selectedCategory.Id; // Устанавливаем CategoryId
 
                         // Обновляем существующую транзакцию
                         dbHelper.UpdateTransaction(newTransaction, selectedTransaction);
@@ -580,7 +610,7 @@ namespace Книга_учета
                     if (result == DialogResult.Yes)
                     {
                         // Удаляем транзакцию из базы данных
-                        dbHelper.DeleteTransaction(selectedTransaction.Date, selectedTransaction.Description, selectedTransaction.Amount);
+                        dbHelper.DeleteTransaction(selectedTransaction.Id);
                         // Удаляем транзакцию из списка в памяти
                         accountingData.DeleteTransaction(selectedTransaction.Date, selectedTransaction.Description, selectedTransaction.Amount);
                         transactionsBindingSource.ResetBindings(false);
@@ -675,7 +705,20 @@ namespace Книга_учета
                     dtpTransactionDate.Value = selectedTransaction.Date;
                     txtTransactionDescription.Text = selectedTransaction.Description;
                     nudTransactionAmount.Value = selectedTransaction.Amount;
-                    cmbTransactionCategory.SelectedItem = selectedTransaction.Category;
+
+                    //пытаемся найти категорию по Id
+                    Category selectedCategory = accountingData.Categories.FirstOrDefault(c => c.Id == selectedTransaction.CategoryId);
+
+                    if (selectedCategory != null)
+                    {
+                        cmbTransactionCategory.SelectedItem = selectedCategory;
+                    }
+                    else
+                    {
+                        MessageBox.Show("Категория не найдена.", "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        cmbTransactionCategory.SelectedIndex = -1; // сбрасываем выбор
+                    }
+
 
                     if (selectedTransaction.Type == TransactionType.Income)
                     {

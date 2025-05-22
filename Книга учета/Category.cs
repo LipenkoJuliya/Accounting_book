@@ -2,28 +2,18 @@
 
 namespace Книга_учета
 {
-    // Класс для категории операции
     public class Category
     {
+        public int Id { get; set; }  // Добавлено свойство Id
         public string Name { get; set; }
         public string Description { get; set; }
 
-        public Category()
-        {
-            // Конструктор по умолчанию необходим для десериализации JSON
-            Name = string.Empty;  // Инициализация для избежания NullReferenceException
-            Description = string.Empty; // Инициализация для избежания NullReferenceException
-        }
+        public Category() { }  // Конструктор по умолчанию для десериализации
 
-        public Category(string name, string description = "")
+        public Category(string name, string description)
         {
             Name = name;
             Description = description;
-        }
-
-        public override string ToString()
-        {
-            return Name;
         }
     }
 }

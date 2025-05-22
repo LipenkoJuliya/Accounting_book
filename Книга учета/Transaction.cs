@@ -12,10 +12,12 @@ namespace Книга_учета
     // Класс для операции
     public class Transaction
     {
+        public int Id { get; set; }  // Добавлено свойство Id
         public DateTime Date { get; set; }
         public string Description { get; set; }
         public decimal Amount { get; set; }
-        public Category Category { get; set; }
+        public int CategoryId { get; set; }  // Ссылка на Category.Id
+        public Category Category { get; set; } // Ссылка на Category
         public TransactionType Type { get; set; }
 
         public Transaction()
@@ -26,6 +28,7 @@ namespace Книга_учета
             Amount = 0.0m;     // Инициализация для избежания NullReferenceException
             Category = new Category(); // Инициализация для избежания NullReferenceException
             Type = TransactionType.Expense; // Значение по умолчанию
+            CategoryId = 0; // Инициализация для избежания NullReferenceException
         }
 
         public Transaction(DateTime date, string description, decimal amount, Category category, TransactionType type)
@@ -34,6 +37,7 @@ namespace Книга_учета
             Description = description;
             Amount = amount;
             Category = category;
+            CategoryId = category.Id;
             Type = type;
         }
     }

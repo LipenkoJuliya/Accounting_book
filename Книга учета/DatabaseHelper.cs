@@ -37,7 +37,8 @@ namespace Книга_учета
                 // Создание таблицы Categories
                 string createCategoriesTableQuery = @"
                     CREATE TABLE Categories (
-                        Name TEXT PRIMARY KEY,
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Добавлено Id с автоинкрементом
+                        Name TEXT,
                         Description TEXT
                     );";
                 SQLiteCommand createCategoriesCommand = new SQLiteCommand(createCategoriesTableQuery, connection);
@@ -46,12 +47,13 @@ namespace Книга_учета
                 // Создание таблицы Transactions
                 string createTransactionsTableQuery = @"
                     CREATE TABLE Transactions (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT, -- Добавлено Id с автоинкрементом
                         Date TEXT,
                         Description TEXT,
                         Amount REAL,
-                        CategoryName TEXT,
+                        CategoryId INTEGER,  -- Ссылка на Id категории
                         Type INTEGER,
-                        FOREIGN KEY (CategoryName) REFERENCES Categories(Name)
+                        FOREIGN KEY (CategoryId) REFERENCES Categories(Id)
                     );";
                 SQLiteCommand createTransactionsCommand = new SQLiteCommand(createTransactionsTableQuery, connection);
                 createTransactionsCommand.ExecuteNonQuery();
@@ -59,17 +61,20 @@ namespace Книга_учета
         }
 
         // Методы для работы с категориями
-        public void AddCategory(Category category)
+        public int AddCategory(Category category) // Возвращаем ID
         {
+            int newCategoryId = -1; //  По умолчанию -1, если что-то пойдет не так
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string insertQuery = "INSERT INTO Categories (Name, Description) VALUES (@Name, @Description);";
+                string insertQuery = "INSERT INTO Categories (Name, Description) VALUES (@Name, @Description); SELECT last_insert_rowid();"; // Получаем ID
                 SQLiteCommand insertCommand = new SQLiteCommand(insertQuery, connection);
                 insertCommand.Parameters.AddWithValue("@Name", category.Name);
                 insertCommand.Parameters.AddWithValue("@Description", category.Description);
-                insertCommand.ExecuteNonQuery();
+                newCategoryId = Convert.ToInt32(insertCommand.ExecuteScalar());  // Получаем ID
+
             }
+            return newCategoryId;
         }
 
         public void UpdateCategory(Category category)
@@ -77,30 +82,31 @@ namespace Книга_учета
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string updateQuery = "UPDATE Categories SET Description = @Description WHERE Name = @Name;";
+                string updateQuery = "UPDATE Categories SET Name = @Name, Description = @Description WHERE Id = @Id;"; // Обновление по Id
                 SQLiteCommand updateCommand = new SQLiteCommand(updateQuery, connection);
-                updateCommand.Parameters.AddWithValue("@Name", category.Name);
+                updateCommand.Parameters.AddWithValue("@Id", category.Id);  // Используем Id
+                updateCommand.Parameters.AddWithValue("@Name", category.Name); // Добавил Name
                 updateCommand.Parameters.AddWithValue("@Description", category.Description);
                 updateCommand.ExecuteNonQuery();
             }
         }
 
-        public void DeleteCategory(string categoryName)
+        public void DeleteCategory(int categoryId) // Принимаем id
         {
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
 
                 // Сначала удаляем транзакции, связанные с этой категорией
-                string deleteTransactionsQuery = "DELETE FROM Transactions WHERE CategoryName = @CategoryName;";
+                string deleteTransactionsQuery = "DELETE FROM Transactions WHERE CategoryId = @CategoryId;"; // используем CategoryId
                 SQLiteCommand deleteTransactionsCommand = new SQLiteCommand(deleteTransactionsQuery, connection);
-                deleteTransactionsCommand.Parameters.AddWithValue("@CategoryName", categoryName);
+                deleteTransactionsCommand.Parameters.AddWithValue("@CategoryId", categoryId);
                 deleteTransactionsCommand.ExecuteNonQuery();
 
                 // Затем удаляем саму категорию
-                string deleteCategoryQuery = "DELETE FROM Categories WHERE Name = @Name;";
+                string deleteCategoryQuery = "DELETE FROM Categories WHERE Id = @Id;"; // используем Id
                 SQLiteCommand deleteCategoryCommand = new SQLiteCommand(deleteCategoryQuery, connection);
-                deleteCategoryCommand.Parameters.AddWithValue("@Name", categoryName);
+                deleteCategoryCommand.Parameters.AddWithValue("@Id", categoryId);
                 deleteCategoryCommand.ExecuteNonQuery();
             }
         }
@@ -111,13 +117,14 @@ namespace Книга_учета
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string selectQuery = "SELECT Name, Description FROM Categories;";
+                string selectQuery = "SELECT Id, Name, Description FROM Categories;"; // Получаем Id
                 SQLiteCommand selectCommand = new SQLiteCommand(selectQuery, connection);
                 using (SQLiteDataReader reader = selectCommand.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        Category category = new Category(reader.GetString(0), reader.GetString(1));
+                        Category category = new Category(reader.GetString(1), reader.GetString(2));
+                        category.Id = reader.GetInt32(0); // Устанавливаем Id
                         categories.Add(category);
                     }
                 }
@@ -131,12 +138,12 @@ namespace Книга_учета
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string insertQuery = "INSERT INTO Transactions (Date, Description, Amount, CategoryName, Type) VALUES (@Date, @Description, @Amount, @CategoryName, @Type);";
+                string insertQuery = "INSERT INTO Transactions (Date, Description, Amount, CategoryId, Type) VALUES (@Date, @Description, @Amount, @CategoryId, @Type);";
                 SQLiteCommand insertCommand = new SQLiteCommand(insertQuery, connection);
                 insertCommand.Parameters.AddWithValue("@Date", transaction.Date.ToString("yyyy-MM-dd HH:mm:ss"));
                 insertCommand.Parameters.AddWithValue("@Description", transaction.Description);
                 insertCommand.Parameters.AddWithValue("@Amount", transaction.Amount);
-                insertCommand.Parameters.AddWithValue("@CategoryName", transaction.Category.Name);
+                insertCommand.Parameters.AddWithValue("@CategoryId", transaction.CategoryId); // Используем CategoryId
                 insertCommand.Parameters.AddWithValue("@Type", (int)transaction.Type);
                 insertCommand.ExecuteNonQuery();
             }
@@ -152,35 +159,29 @@ namespace Книга_учета
                 SET Date = @Date, 
                     Description = @Description, 
                     Amount = @Amount, 
-                    CategoryName = @CategoryName, 
+                    CategoryId = @CategoryId,  -- Обновляем CategoryId
                     Type = @Type 
-                WHERE Date = @OriginalDate 
-                  AND Description = @OriginalDescription 
-                  AND Amount = @OriginalAmount;";
+                WHERE Id = @Id;";  // используем ID
 
                 SQLiteCommand updateCommand = new SQLiteCommand(updateQuery, connection);
                 updateCommand.Parameters.AddWithValue("@Date", newTransaction.Date.ToString("yyyy-MM-dd HH:mm:ss"));
                 updateCommand.Parameters.AddWithValue("@Description", newTransaction.Description);
                 updateCommand.Parameters.AddWithValue("@Amount", newTransaction.Amount);
-                updateCommand.Parameters.AddWithValue("@CategoryName", newTransaction.Category.Name);
+                updateCommand.Parameters.AddWithValue("@CategoryId", newTransaction.CategoryId); // Используем CategoryId
                 updateCommand.Parameters.AddWithValue("@Type", (int)newTransaction.Type);
-                updateCommand.Parameters.AddWithValue("@OriginalDate", originalTransaction.Date.ToString("yyyy-MM-dd HH:mm:ss"));
-                updateCommand.Parameters.AddWithValue("@OriginalDescription", originalTransaction.Description);
-                updateCommand.Parameters.AddWithValue("@OriginalAmount", originalTransaction.Amount);
+                updateCommand.Parameters.AddWithValue("@Id", originalTransaction.Id); // используем Id
                 updateCommand.ExecuteNonQuery();
             }
         }
 
-        public void DeleteTransaction(DateTime date, string description, decimal amount)
+        public void DeleteTransaction(int transactionId) // Принимаем ID
         {
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string deleteQuery = "DELETE FROM Transactions WHERE Date = @Date AND Description = @Description AND Amount = @Amount;";
+                string deleteQuery = "DELETE FROM Transactions WHERE Id = @Id;"; // используем ID
                 SQLiteCommand deleteCommand = new SQLiteCommand(deleteQuery, connection);
-                deleteCommand.Parameters.AddWithValue("@Date", date.ToString("yyyy-MM-dd HH:mm:ss"));
-                deleteCommand.Parameters.AddWithValue("@Description", description);
-                deleteCommand.Parameters.AddWithValue("@Amount", amount);
+                deleteCommand.Parameters.AddWithValue("@Id", transactionId);
                 deleteCommand.ExecuteNonQuery();
             }
         }
@@ -191,22 +192,30 @@ namespace Книга_учета
             using (SQLiteConnection connection = new SQLiteConnection(connectionString))
             {
                 connection.Open();
-                string selectQuery = "SELECT Date, Description, Amount, CategoryName, Type FROM Transactions;";
+                string selectQuery = @"
+                SELECT t.Id, t.Date, t.Description, t.Amount, t.CategoryId, t.Type, c.Name, c.Description
+                FROM Transactions t
+                INNER JOIN Categories c ON t.CategoryId = c.Id;"; // Используем JOIN
+
                 SQLiteCommand selectCommand = new SQLiteCommand(selectQuery, connection);
                 using (SQLiteDataReader reader = selectCommand.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        DateTime date = DateTime.Parse(reader.GetString(0));
-                        string description = reader.GetString(1);
-                        decimal amount = Convert.ToDecimal(reader.GetValue(2));
-                        string categoryName = reader.GetString(3);
-                        TransactionType type = (TransactionType)Convert.ToInt32(reader.GetValue(4));
+                        Transaction transaction = new Transaction();
+                        transaction.Id = reader.GetInt32(0); // Получаем ID транзакции
+                        transaction.Date = DateTime.Parse(reader.GetString(1));
+                        transaction.Description = reader.GetString(2);
+                        transaction.Amount = Convert.ToDecimal(reader.GetValue(3));
+                        transaction.CategoryId = reader.GetInt32(4); // Получаем CategoryId
+                        transaction.Type = (TransactionType)Convert.ToInt32(reader.GetValue(5));
 
-                        // Получаем категорию по имени
-                        Category category = GetAllCategories().FirstOrDefault(c => c.Name == categoryName);
+                        Category category = new Category();
+                        category.Id = transaction.CategoryId;  // Устанавливаем Id категории
+                        category.Name = reader.GetString(6); // Получаем имя категории из результата запроса
+                        category.Description = reader.GetString(7); // Получаем описание категории из результата запроса
 
-                        Transaction transaction = new Transaction(date, description, amount, category, type);
+                        transaction.Category = category; //  Присваиваем объект Category
                         transactions.Add(transaction);
                     }
                 }

@@ -39,15 +39,6 @@ namespace Книга_учета
         // Методы CRUD для категорий
         public void AddCategory(Category category)
         {
-            //if (!Categories.Any(c => c.Name == category.Name))
-            //{
-            //dbHelper.AddCategory(category);
-            //   Categories.Add(category);
-            //}
-            //else
-            //{
-            //    Console.WriteLine("Категория с таким именем уже существует.");
-            //}
             Categories.Add(category);
         }
 
@@ -56,9 +47,9 @@ namespace Книга_учета
             Category existingCategory = Categories.FirstOrDefault(c => c.Name == oldName);
             if (existingCategory != null)
             {
-                // dbHelper.UpdateCategory(newCategory);
                 existingCategory.Name = newCategory.Name;
                 existingCategory.Description = newCategory.Description;
+                existingCategory.Id = newCategory.Id;
             }
             else
             {
@@ -66,15 +57,14 @@ namespace Книга_учета
             }
         }
 
-        public void DeleteCategory(string categoryName)
+        public void DeleteCategory(string categoryName) //  Удалить параметр
         {
             Category categoryToRemove = Categories.FirstOrDefault(c => c.Name == categoryName);
             if (categoryToRemove != null)
             {
-                // dbHelper.DeleteCategory(categoryName);
                 Categories.Remove(categoryToRemove);
                 // Удалить все транзакции, связанные с этой категорией.  Важно!
-                Transactions.RemoveAll(t => t.Category.Name == categoryName);
+                Transactions.RemoveAll(t => t.Category.Name == categoryToRemove.Name);  // Обновлено
             }
             else
             {
@@ -85,27 +75,21 @@ namespace Книга_учета
         // Методы CRUD для операций
         public void AddTransaction(Transaction transaction)
         {
-            // dbHelper.AddTransaction(transaction);
             Transactions.Add(transaction);
         }
 
         public void UpdateTransaction(Transaction originalTransaction, Transaction newTransaction)
         {
-            // Сначала ищем существующую транзакцию по дате, описанию и сумме
-            Transaction existingTransaction = Transactions.FirstOrDefault(t =>
-                t.Date == originalTransaction.Date &&
-                t.Description == originalTransaction.Description &&
-                t.Amount == originalTransaction.Amount);
+            // Сначала ищем существующую транзакцию по Id
+            Transaction existingTransaction = Transactions.FirstOrDefault(t => t.Id == originalTransaction.Id);
 
             if (existingTransaction != null)
             {
-                // Обновляем существующую транзакцию в базе данных
-                //  dbHelper.UpdateTransaction(newTransaction, originalTransaction);
-
                 // Обновляем свойства существующей транзакции в памяти
                 existingTransaction.Date = newTransaction.Date;
                 existingTransaction.Description = newTransaction.Description;
                 existingTransaction.Amount = newTransaction.Amount;
+                existingTransaction.CategoryId = newTransaction.CategoryId;  // Обновляем CategoryId
                 existingTransaction.Category = newTransaction.Category;
                 existingTransaction.Type = newTransaction.Type;
             }
@@ -115,10 +99,9 @@ namespace Книга_учета
             }
         }
 
-        public void DeleteTransaction(DateTime date, string description, decimal amount)
+        public void DeleteTransaction(DateTime date, string description, decimal amount) // Удаляем параметры
         {
-            //  dbHelper.DeleteTransaction(date, description, amount);
-            Transactions.RemoveAll(t => t.Date == date && t.Description == description && t.Amount == amount);
+            // Transactions.RemoveAll(t => t.Date == date && t.Description == description && t.Amount == amount);
         }
 
         // Подсчет баланса
